@@ -9,28 +9,40 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import time
-from os import path
+import os
 import urllib.request as www
 #plt.ion()
+covidDir='c:/gen/covid19'
 
-def cvprocess():
+def cvprocess(covidDir):
+    if not(os.path.isdir(covidDir)):
+        try:
+            os.mkdir(covidDir)
+        except OSError:
+            print("Creation of the directory {} failed".format(covidDir))
+            print("Please create a directory name {}".format(covidDir))
+            return
+        else:
+            print("Successfully created the directory {}".format(covidDir))
+
     today=time.asctime()
     today=today[4:10]
     today=today.replace(' ','')
-    fname='c:\gen\covid19\download'+today+'.csv'
-    if not(path.isfile(fname)):
+
+    fname=os.path.join(covidDir, 'download'+today+'.csv')
+    if not(os.path.isfile(fname)):
         print('Retrieving todays new data')
         www.urlretrieve('https://opendata.ecdc.europa.eu/covid19/casedistribution/csv',fname)
     else:
         print('File already retrieved')
-    IRLCasesToday=548+284         # if new data announced put here otherwise set to 0
-    IRLDeathsToday=41
+    IRLCasesToday=629+95         # if new data announced put here otherwise set to 0
+    IRLDeathsToday=43
     nDaysLine=33            # No. of days to plot on line charts
     nDaysBar=14             # No. of days to plot on bar charts
     eurCountries=['AUT','BLR','BEL','BIH','BGR','HRV','CYP','DNK','EST','FIN','FRA','DEU','GRC','IRL',
                      'ITA','LUX','NLD','POL','PRT','ROU','SRB','SVK','SVN','ESP','SWE','CHE','GBR']
-    countries=['IRL','FRA',       'ITA',    'USA',          'ESP',  'GBR',   'DEU',          'PRT',           'AUS','SWE','EUR']
-    colors=[[0,0.6,0],[0,0.5,0.75],[0,0.7,1],[1,0,0],[0.0,0.0,0.0],[1,0.7,0],[0.63,0.63,0],[0.8,0.8,0.8],[0.85,0.9,0],[0.7,0.0,0.7],[0.4,0.4,0.4]]
+    countries=['IRL','FRA',       'ITA',    'USA',          'ESP',  'GBR',   'DEU',           'AUS','SWE','EUR']
+    colors=[[0,0.7,0],[0,0.25,0.85],[0,0.7,1],[1,0,0],[0.0,0.0,0.0],[1,0.7,0],[0.63,0.63,0],[0.85,0.9,0],[0.7,0.0,0.7],[0.0,0.55,0.70]]
     
     nCountries=len(countries)
     maxDays=200
@@ -42,6 +54,7 @@ def cvprocess():
     euNewCases=np.zeros(maxDays)
     euNewDeaths=np.zeros(maxDays)
     euPop=0;
+    nullxy=np.arange(0,0.01,0.01)
     # Go through data for each Euro country
     for iEurCountry in range(len(eurCountries)):
         popd=stats.popData2018[stats.countryterritoryCode==eurCountries[iEurCountry]]
@@ -55,7 +68,7 @@ def cvprocess():
     allCNames = pd.DataFrame(columns=['CNames'])
     dayWidth=1      # width of each day
     countryWidth=dayWidth/(nCountries+2)
-    cms=['NewCases', 'NewDeaths', 'TotalCases', 'TotalDeaths','CaseFatalityRate','CaseRateIncrease','DeathRateIncrease','CasesPer1M', 'DeathsPer1M','DeathsShape','DeathsPerM Since 10perM']
+    cms=['NewCases', 'NewDeaths', 'TotalCases', 'TotalDeaths','CaseFatalityRate','CaseRateIncrease','DeathRateIncrease','CasesPer1M', 'DeathsPer1M','Deaths Curve Shape (if DperM 20+)','DeathsPerM Since 10perM']
     barchart=np.array([1 ,       1,          0,             0,             0,                  1,           1,           0,            0,            0,            0])
     percent =np.array([0 ,       0,          0,             0,             1,                  1,           1,           0,            0,            1,            0])
     # Need an array of axes, there must be a better way to do it than this:
@@ -103,20 +116,29 @@ def cvprocess():
         allData[-len(rod):,iCol+6]=rod
         allData[-len(cumCases):,iCol+7]=cumCases/pop*1000000
         allData[-len(cumDeaths):,iCol+8]=cumDeaths/pop*1000000
-        allData[-len(cumDeaths):,iCol+9]=cumDeaths/cumDeaths[-1:]
+        #allData[-len(cumDeaths):,iCol+9]=cumDeaths/cumDeaths[-1:]
+        allData[-len(cumDeaths):,iCol+9]=cumDeaths/pop*1000000
         allData[-len(cumDeaths):,iCol+10]=cumDeaths/pop*1000000
-        xBar=np.arange(0,nDaysBar)*dayWidth
+        xBar=np.arange(nDaysBar)*dayWidth
         for iCms in range(len(cms)):
             if barchart[iCms]==1:
                 maxThis=np.max(allData[-nDaysBar:,iCol+iCms]);
                 ax[iCms].bar(xBar+iCountry*countryWidth+dayWidth/10,allData[-nDaysBar:,iCol+iCms],
                              countryWidth,label=countries[iCountry],color=colors[iCountry])
-            elif iCms!=10:
-                if iCms==9:
-                    print(cumDeaths[-1:])
+            elif iCms!=10 and iCms!=9:
                 maxThis=np.max(allData[-nDaysLine:,iCol+iCms]);
                 ax[iCms].plot(dates[nDaysLine-1::-1],allData[-nDaysLine:,iCol+iCms],marker='o',
                               color=colors[iCountry],linewidth=3)
+            elif iCms==9:
+                 maxThis=1.0;
+                 data=allData[-len(cumDeaths):,iCol+iCms]
+                 if max(data)>20  and pop>3000000:            # Don't plot countries with <50 deaths per million
+                     data=data/max(data)
+                     data=data[data>0.01]
+                     if len(data)>0:
+                         ax[iCms].plot(np.arange(len(data))/len(data),data,marker='o',color=colors[iCountry],linewidth=3)
+                 else:
+                     ax[iCms].plot(nullxy,nullxy,'o',color=colors[iCountry],linewidth=3)
             elif iCms==10:
                  maxThis=np.max(allData[-nDaysLine:,iCol+iCms]);
                  data=allData[-len(cumDeaths):,iCol+iCms]
@@ -126,7 +148,7 @@ def cvprocess():
                 maxy[iCms]=maxThis
             allCNames=allCNames.append({'CNames':countries[iCountry]+cms[iCms]},ignore_index=True)
         iCol=iCol+len(cms)
-        plt.pause(0.1)
+        #plt.pause(0.1)
         print(countries[iCountry],len(newCases),pop)
     dates=dates[0:nDaysLine]
     daysPerLabelBar=int(np.round(nDaysBar/14))
@@ -142,6 +164,9 @@ def cvprocess():
             axs[1]=nDaysBar
             ax[iAx].set_xticklabels(dates[nDaysBar-1::-daysPerLabelBar])
             ax[iAx].set_xticks(np.arange(0,nDaysBar,daysPerLabelBar))
+        elif iAx==9:
+            axs[1]=1
+            ax[iAx].set_xticks(np.arange(0,1,0.1))
         else:
             axs[1]=nDaysLine
             ax[iAx].set_xticks(np.arange(0,nDaysLine,daysPerLabelLine))
@@ -154,9 +179,9 @@ def cvprocess():
         plt.axis(axs)
         plt.xlabel('Day')
         plt.tight_layout()
-        plt.savefig('c:/gen/covid19/'+cms[iAx]+today+'.png')
+        plt.savefig(os.path.join(covidDir, cms[iAx]+today+'.png'))
     df=pd.DataFrame(allData[-len(dates):,:],dates[::-1],allCNames.CNames)
-    df.to_csv('C:/Gen/Covid19/stats'+today+'.csv')
+    df.to_csv(os.path.join(covidDir, today+'.csv'))
     plt.show()
     time.sleep(0.01)
     print('The End')
@@ -164,6 +189,6 @@ def cvprocess():
 
 #
 plt.close('all')
-cvprocess()
+cvprocess(covidDir)
 
 
